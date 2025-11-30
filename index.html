@@ -1,11 +1,91 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>Widget Test</title>
-    <script src="./widget.js" data-tenant="TEST123"></script>
-  </head>
-  <body>
-    <h1>Widget Demo</h1>
-    <p>The widget should appear in the bottom-right corner.</p>
-  </body>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Chat Widget</title>
+</head>
+<body>
+
+<script>
+// Wait for page load to avoid race conditions
+document.addEventListener("DOMContentLoaded", () => {
+    // ---- 1. Create container ----
+    const container = document.createElement("div");
+    container.id = "chat-widget-container";
+    document.body.appendChild(container);
+
+    // ---- 2. Shadow DOM isolation ----
+    const shadow = container.attachShadow({ mode: "open" });
+
+    // ---- 3. Styles inside the Shadow DOM ----
+    const style = document.createElement("style");
+    style.textContent = `
+        .widget-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #2c7be5;
+            color: white;
+            border-radius: 30px;
+            padding: 15px 20px;
+            cursor: pointer;
+            font-family: sans-serif;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            z-index: 999999;
+        }
+
+        .chat-box {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 350px;
+            height: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 999999;
+            font-family: sans-serif;
+        }
+
+        .chat-header {
+            background: #2c7be5;
+            color: white;
+            padding: 12px;
+        }
+
+        .chat-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    `;
+    shadow.appendChild(style);
+
+    // ---- 4. HTML for widget ----
+    const widgetHTML = document.createElement("div");
+    widgetHTML.innerHTML = `
+        <div class="widget-button">💬 Chat</div>
+
+        <div class="chat-box">
+            <div class="chat-header">AI Assistant</div>
+            <iframe class="chat-iframe" src="https://YOUR-N8N-URL/chat"></iframe>
+        </div>
+    `;
+    shadow.appendChild(widgetHTML);
+
+    // ---- 5. Toggle logic ----
+    const btn = shadow.querySelector(".widget-button");
+    const box = shadow.querySelector(".chat-box");
+
+    btn.addEventListener("click", () => {
+        box.style.display = box.style.display === "none" ? "flex" : "none";
+    });
+});
+</script>
+
+</body>
 </html>
