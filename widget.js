@@ -1,4 +1,7 @@
 (function () {
+
+    console.log("Widget script loaded!");
+
     // --- Utility: Create or retrieve persistent session ID ---
     function getSessionId() {
         const key = "chat_widget_session_id";
