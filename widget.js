@@ -183,12 +183,33 @@
                     })
                 });
 
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
+
                 const data = await res.json();
-                addMessage(data.response || "No response", "bot");
+                
+                // Handle various response formats from n8n
+                let botResponse;
+                if (data.response) {
+                    botResponse = data.response;
+                } else if (data.output) {
+                    botResponse = data.output;
+                } else if (data.message) {
+                    botResponse = data.message;
+                } else if (data.answer) {
+                    botResponse = data.answer;
+                } else if (typeof data === 'string') {
+                    botResponse = data;
+                } else {
+                    botResponse = "I received your message but couldn't find a response.";
+                }
+                
+                addMessage(botResponse, "bot");
 
             } catch (err) {
-                addMessage("Error contacting server.", "bot");
-                console.error(err);
+                addMessage("Error contacting server. Please try again.", "bot");
+                console.error("Chat widget error:", err);
             }
         }
 
