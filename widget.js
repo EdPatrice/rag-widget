@@ -187,22 +187,32 @@
                     throw new Error(`HTTP error! status: ${res.status}`);
                 }
 
-                const data = await res.json();
+                // Get response as text first
+                const responseText = await res.text();
                 
-                // Handle various response formats from n8n
                 let botResponse;
-                if (data.response) {
-                    botResponse = data.response;
-                } else if (data.output) {
-                    botResponse = data.output;
-                } else if (data.message) {
-                    botResponse = data.message;
-                } else if (data.answer) {
-                    botResponse = data.answer;
-                } else if (typeof data === 'string') {
-                    botResponse = data;
-                } else {
-                    botResponse = "I received your message but couldn't find a response.";
+                
+                // Try to parse as JSON
+                try {
+                    const data = JSON.parse(responseText);
+                    
+                    // Handle various JSON response formats
+                    if (data.response) {
+                        botResponse = data.response;
+                    } else if (data.output) {
+                        botResponse = data.output;
+                    } else if (data.message) {
+                        botResponse = data.message;
+                    } else if (data.answer) {
+                        botResponse = data.answer;
+                    } else if (typeof data === 'string') {
+                        botResponse = data;
+                    } else {
+                        botResponse = "I received your message but couldn't find a response.";
+                    }
+                } catch (jsonError) {
+                    // If JSON parsing fails, treat as plain text
+                    botResponse = responseText;
                 }
                 
                 addMessage(botResponse, "bot");
