@@ -1,137 +1,208 @@
-(function() {
-    // ---------- CONFIG ----------
-    const TENANT_ID = document.currentScript.getAttribute("data-tenant");
-    const N8N_ENDPOINT = "https://edn8n.oph.st/webhook/5ffdb28c-1355-449d-b637-1eedaaf3b8e9"; 
-
-    // ---------- UTILITIES ----------
-    function uuid() {
-        return crypto.randomUUID();
+(function () {
+    // --- Utility: Create or retrieve persistent session ID ---
+    function getSessionId() {
+        const key = "chat_widget_session_id";
+        let id = localStorage.getItem(key);
+        if (!id) {
+            id = crypto.randomUUID();
+            localStorage.setItem(key, id);
+        }
+        return id;
     }
 
-    function getOrCreateUserId() {
-        const saved = localStorage.getItem("rag_user_id");
-        if (saved) return saved;
-
-        const newId = "usr_" + uuid();
-        localStorage.setItem("rag_user_id", newId);
-        return newId;
+    // --- Utility: Extract tenant ID from script tag ---
+    function getTenantId() {
+        const script = document.currentScript;
+        const tenant = script?.dataset?.tenant;
+        if (!tenant) {
+            console.error("Chat widget error: Missing data-tenant attribute.");
+            return null;
+        }
+        return tenant;
     }
 
-    function getOrCreateSessionId() {
-        let session = sessionStorage.getItem("rag_session_id");
-        if (session) return session;
+    const tenantId = getTenantId();
+    const sessionId = getSessionId();
 
-        session = "sess_" + uuid();
-        sessionStorage.setItem("rag_session_id", session);
-        return session;
-    }
+    // Stop if tenant missing
+    if (!tenantId) return;
 
-    function resetSession() {
-        sessionStorage.removeItem("rag_session_id");
-    }
+    document.addEventListener("DOMContentLoaded", () => {
+        // --- Create container for Shadow DOM ---
+        const container = document.createElement("div");
+        container.id = "chat-widget-container";
+        document.body.appendChild(container);
 
-    // ---------- IDENTIFIERS ----------
-    const userId = getOrCreateUserId();
-    let sessionId = getOrCreateSessionId();
+        const shadow = container.attachShadow({ mode: "open" });
 
-    // ---------- UI CREATION ----------
-    const button = document.createElement("div");
-    button.innerHTML = "💬";
-    button.style.position = "fixed";
-    button.style.bottom = "20px";
-    button.style.right = "20px";
-    button.style.width = "60px";
-    button.style.height = "60px";
-    button.style.borderRadius = "50%";
-    button.style.background = "#4F46E5";
-    button.style.color = "#fff";
-    button.style.display = "flex";
-    button.style.justifyContent = "center";
-    button.style.alignItems = "center";
-    button.style.cursor = "pointer";
-    button.style.fontSize = "28px";
-    button.style.zIndex = 999999;
+        // --- Styles ---
+        const style = document.createElement("style");
+        style.textContent = `
+            .chat-button {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: #2c7be5;
+                color: white;
+                border-radius: 30px;
+                padding: 15px 20px;
+                cursor: pointer;
+                font-family: sans-serif;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+                z-index: 999999;
+            }
 
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.bottom = "90px";
-    iframe.style.right = "20px";
-    iframe.style.width = "350px";
-    iframe.style.height = "450px";
-    iframe.style.border = "1px solid #CCC";
-    iframe.style.borderRadius = "10px";
-    iframe.style.boxShadow = "0 0 20px rgba(0,0,0,0.2)";
-    iframe.style.display = "none";
-    iframe.style.zIndex = 999998;
-    iframe.srcdoc = `
-        <html>
-        <body style="margin:0;font-family:sans-serif;display:flex;flex-direction:column;height:100%;">
-            <div style="padding:10px;background:#4F46E5;color:white;">AI Assistant</div>
-            <div id="messages" style="flex:1;overflow-y:auto;padding:10px;"></div>
+            .chat-window {
+                position: fixed;
+                bottom: 80px;
+                right: 20px;
+                width: 350px;
+                height: 500px;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                display: none;
+                flex-direction: column;
+                overflow: hidden;
+                z-index: 999999;
+                font-family: sans-serif;
+            }
 
-            <div style="padding:10px;display:flex;gap:5px;">
-                <input id="msg" style="flex:1;padding:6px;border:1px solid #CCC;border-radius:5px;" placeholder="Your message..." />
-                <button id="send" style="padding:6px 10px;background:#4F46E5;color:white;border:none;border-radius:5px;">Send</button>
+            .chat-header {
+                background: #2c7be5;
+                color: white;
+                padding: 12px;
+                font-weight: bold;
+            }
+
+            .messages {
+                flex: 1;
+                padding: 10px;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                background: #f5f5f5;
+            }
+
+            .msg-user {
+                align-self: flex-end;
+                background: #2c7be5;
+                color: white;
+                padding: 10px;
+                border-radius: 12px;
+                max-width: 75%;
+            }
+
+            .msg-bot {
+                align-self: flex-start;
+                background: #e8e8e8;
+                color: black;
+                padding: 10px;
+                border-radius: 12px;
+                max-width: 75%;
+            }
+
+            .chat-input {
+                display: flex;
+                padding: 10px;
+                gap: 6px;
+                background: white;
+                border-top: 1px solid #ddd;
+            }
+
+            .chat-input input {
+                flex: 1;
+                padding: 8px;
+                border-radius: 8px;
+                border: 1px solid #ccc;
+                outline: none;
+            }
+
+            .chat-input button {
+                background: #2c7be5;
+                color: white;
+                border: none;
+                padding: 8px 14px;
+                border-radius: 8px;
+                cursor: pointer;
+            }
+        `;
+        shadow.appendChild(style);
+
+        // --- HTML Structure ---
+        const html = document.createElement("div");
+        html.innerHTML = `
+            <div class="chat-button">💬</div>
+            <div class="chat-window">
+                <div class="chat-header">AI Assistant</div>
+                <div class="messages"></div>
+                <div class="chat-input">
+                    <input type="text" placeholder="Type your message..." />
+                    <button>Send</button>
+                </div>
             </div>
+        `;
+        shadow.appendChild(html);
 
-            <script>
-                const messages = document.getElementById("messages");
-                const sendBtn = document.getElementById("send");
-                const input = document.getElementById("msg");
+        const btn = shadow.querySelector(".chat-button");
+        const windowEl = shadow.querySelector(".chat-window");
+        const messages = shadow.querySelector(".messages");
+        const input = shadow.querySelector(".chat-input input");
+        const sendBtn = shadow.querySelector(".chat-input button");
 
-                function addMessage(role, text) {
-                    const d = document.createElement("div");
-                    d.innerHTML = "<b>" + role + "</b>: " + text;
-                    d.style.marginBottom = "10px";
-                    messages.appendChild(d);
-                    messages.scrollTop = messages.scrollHeight;
-                }
+        // --- Toggle window ---
+        btn.addEventListener("click", () => {
+            windowEl.style.display = windowEl.style.display === "none" ? "flex" : "none";
+        });
 
-                window.addEventListener("message", async (event) => {
-                    const { tenant_id, user_id, session_id, message } = event.data;
+        // --- Add message to UI ---
+        function addMessage(text, sender) {
+            const bubble = document.createElement("div");
+            bubble.className = sender === "user" ? "msg-user" : "msg-bot";
+            bubble.textContent = text;
+            messages.appendChild(bubble);
+            messages.scrollTop = messages.scrollHeight;
+        }
 
-                    addMessage("You", message);
+        // --- Send message to n8n ---
+        async function sendToN8N(message) {
+            addMessage(message, "user");
 
-                    const res = await fetch("${N8N_ENDPOINT}", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ tenant_id, user_id, session_id, message })
-                    });
-
-                    const data = await res.json();
-                    addMessage("AI", data.reply || "[No reply]");
+            try {
+                const res = await fetch("https://edn8n.oph.st/webhook/5ffdb28c-1355-449d-b637-1eedaaf3b8e9", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        tenant_id: tenantId,
+                        session_id: sessionId,
+                        message: message
+                    })
                 });
 
-                sendBtn.onclick = () => {
-                    const msg = input.value.trim();
-                    if (!msg) return;
-                    window.parent.postMessage({ type: "send", message: msg }, "*");
-                    input.value = "";
-                };
-            </script>
-        </body>
-        </html>
-    `;
+                const data = await res.json();
+                addMessage(data.response || "No response", "bot");
 
-    // ---------- WIDGET BEHAVIOR ----------
-    button.onclick = () => {
-        iframe.style.display = iframe.style.display === "none" ? "block" : "none";
-    };
-
-    window.addEventListener("message", (event) => {
-        if (event.data.type === "send") {
-            const payload = {
-                tenant_id: TENANT_ID,
-                user_id: userId,
-                session_id: sessionId,
-                message: event.data.message
-            };
-            iframe.contentWindow.postMessage(payload, "*");
+            } catch (err) {
+                addMessage("Error contacting server.", "bot");
+                console.error(err);
+            }
         }
+
+        // --- Send on click ---
+        sendBtn.addEventListener("click", () => {
+            if (input.value.trim() !== "") {
+                sendToN8N(input.value.trim());
+                input.value = "";
+            }
+        });
+
+        // --- Send on Enter ---
+        input.addEventListener("keypress", (e) => {
+            if (e.key === "Enter" && input.value.trim() !== "") {
+                sendToN8N(input.value.trim());
+                input.value = "";
+            }
+        });
     });
-
-    // Inject into page
-    document.body.appendChild(button);
-    document.body.appendChild(iframe);
-
 })();
